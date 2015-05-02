@@ -1,0 +1,139 @@
+% Template for ICIP-2013 paper; to be used with:
+%          spconf.sty  - ICASSP/ICIP LaTeX style file, and
+%          IEEEbib.bst - IEEE bibliography style file.
+% --------------------------------------------------------------------------
+\documentclass{article}
+\usepackage{spconf,amsmath,graphicx}
+
+% Example definitions.
+% --------------------
+\def\x{{\mathbf x}}
+\def\L{{\cal L}}
+
+% Title.
+% ------
+\title{Investigation on Parallelization of Deep Neural Network Training using Multiple GPUs}
+%
+% Single address.
+% ---------------
+\name{Hang Su$^1$$^2$, Haoyu Chen$^1$, Nelson Morgan$^2$}
+\address{$^1$ International Computer Science Institute, Berkeley, California, US \\
+$^2$ Dept. of Electrical Engineering \& Computer Science, University of California, Berkeley, CA, USA \\
+{\small \tt \{suhang3240@gmail.com, williamchenthu@gmail.com\}}
+}
+%
+% For example:
+% ------------
+%\address{School\\
+%	Department\\
+%	Address}
+%
+% Two addresses (uncomment and modify for two-address case).
+% ----------------------------------------------------------
+%\twoauthors
+%  {A. Author-one, B. Author-two\sthanks{Thanks to XYZ agency for funding.}}
+%	{School A-B\\
+%	Department A-B\\
+%	Address A-B}
+%  {C. Author-three, D. Author-four\sthanks{The fourth author performed the work
+%	while at ...}}
+%	{School C-D\\
+%	Department C-D\\
+%	Address C-D}
+%
+\begin{document}
+%\ninept
+%
+\maketitle
+%
+\begin{abstract}
+In this paper we introduce Butterfly mixing to parallel training of deep neural networks (DNN). Parallelization is done
+in a model averaging manner. Data is partitioned and distributed to different nodes for local model update, and
+model averaging (reduce) is done every few minibatches. We compare several different reduce stratgies, including
+all reduce, butterfly mixing, ring reduce and hopping ring reduce. We show that all these methods can effectively
+speed up neural network training. On swithboard data, a xx times speed up is achieved using 16 gpus.
+
+\end{abstract}
+%
+\begin{keywords}
+Parallel training, multiple GPUs, neural network, butterfly mixing
+\end{keywords}
+%
+\section{Introduction}
+\label{sec:intro}
+Deep Neural Networks (DNN) has shown its effeciveness in several machine learning tasks, espencially in speech
+recognition. The large model size and massive training examples make DNN a powerful model for classification. However,
+these two factors also slow down the training procedure of DNNs.
+
+Parallelization of DNN training has been a popular topic since the revive of neural networks. Several different strategies
+have been proposed to tackle this problem. Multiple thread CPU parallelization and single CUDA GPU implementation are compared
+in \cite{scanzio2010parallel,vesely2010parallel}, and they show that single GPU could beat 8 cores CPU by a factor of 2.
+
+Optimality for parallelization of DNN training was analyzed in \cite{seide2014parallelizability}, and based on the analysis, 
+a gradient quantization approach was proposed to minimize communication cost \cite{seide20141}.
+
+DistBelief proposed in \cite{dean2012large} reports a speed up of 2.2x using 8 CPU coresthan using a
+single machine.
+
+
+Asynchronous SGD using multiple GPUs achieved a 3.2x speed-up on 4 GPUs \cite{zhang2013asynchronous}.
+
+A pipeline training approach was propoased in \cite{chen2012pipelined} and a 3.3x speedup was achieved using 4 GPUs, but this
+method does not scale beyond number of layers in the neural network.
+
+A speedup of 6x to 14x was achieved using 16 GPUs on training convolutional neural networks \cite{coates2013deep}. In this approach,
+each GPU is responsible for a partition of the neural network. This approach is more useful for image classification where 
+local structure of the neural network could be exploited.
+
+Distributed model averaging using CPUs is proposed in \cite{zhang2014improving},
+and a further improvement is done using natural gradient \cite{povey2014parallel}.
+
+
+Butterfly mixing was proposed in \cite{zhao2013butterfly} to interleave communication with computation.
+
+
+\section{Data parallelization and Model Averging}
+
+\section{Different Reduce Strategies}
+
+\subsection{Butterfly Mixing}
+
+All printed material, including text, illustrations, and charts, must be kept
+within a print area of 7 inches (178 mm) wide by 9 inches (229 mm) high. Do
+not write or print anything outside the print area. The top margin must be 1
+inch (25 mm), except for the title page, and the left margin must be 0.75 inch
+(19 mm).  All {\it text} must be in a two-column format. Columns are to be 3.39
+inches (86 mm) wide, with a 0.24 inch (6 mm) space between them. Text must be
+fully justified.
+
+\subsection{Ring \& Hopping Ring Reduce}
+
+The paper title (on the first page) should begin 1.38 inches (35 mm) from the
+top edge of the page, centered, completely capitalized, and in Times 14-point,
+boldface type.  The authors' name(s) and affiliation(s) appear below the title
+in capital and lower case letters.  Papers with multiple authors and
+affiliations may require two or more lines for this information. Please note
+that papers should not be submitted blind; include the authors' names on the
+PDF.
+
+\section{Experimental Results}
+\subsection{Reduce Frequency}
+
+\subsection{Reduce type}
+
+\subsection{Scaling factor}
+
+\section{Conclusion}
+
+
+\section{Acknowledgements}
+We would like to thank Forrest Iandola for helpful suggestion.
+
+% References should be produced using the bibtex program from suitable
+% BiBTeX files (here: strings, refs, manuals). The IEEEbib.bst bibliography
+% style file from IEEE produces unsorted bibliography list.
+% -------------------------------------------------------------------------
+\bibliographystyle{IEEEbib}
+\bibliography{paper}
+
+\end{document}
