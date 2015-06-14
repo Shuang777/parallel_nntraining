@@ -1,6 +1,6 @@
 
 type = paper
-output = asru2015
+output = inter15
 
 all: $(type).pdf	
 	cp $(type).pdf ~/Desktop/$(output).pdf
