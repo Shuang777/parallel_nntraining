@@ -12,14 +12,15 @@
 
 % Title.
 % ------
-\title{Investigation on Parallelization of Deep Neural Network Training using Multiple GPUs}
+\title{Parallel Training of Deep Neural Network using Model Averaging and Butterfly Mixing}
 %
 % Single address.
 % ---------------
-\name{Hang Su$^1$$^2$, Haoyu Chen$^1$, Nelson Morgan$^2$}
+\name{Hang Su$^{1,2}$, Haoyu Chen$^1$, Haihua Xu$^3$}
 \address{$^1$ International Computer Science Institute, Berkeley, California, US \\
 $^2$ Dept. of Electrical Engineering \& Computer Science, University of California, Berkeley, CA, USA \\
-{\small \tt \{suhang3240@gmail.com, williamchenthu@gmail.com\}}
+$^3$ Nanyang Technological University, Singapore \\
+{\small \tt \{suhang3240@gmail.com\}}
 }
 %
 % For example:
@@ -47,16 +48,19 @@ $^2$ Dept. of Electrical Engineering \& Computer Science, University of Californ
 \maketitle
 %
 \begin{abstract}
-In this paper we introduce Butterfly mixing to parallel training of deep neural networks (DNN). Parallelization is done
-in a model averaging manner. Data is partitioned and distributed to different nodes for local model update, and
-model averaging (reduce) is done every few minibatches. We compare several different reduce stratgies, including
-all reduce, butterfly mixing, ring reduce and hopping ring reduce. We show that all these methods can effectively
-speed up neural network training. On swithboard data, a xx times speed up is achieved using 16 gpus.
+In this paper we apply model averaging and butterfly mixing to parallel training of deep neural network (DNN). 
+Parallelization is done in a model averaging manner. Data is partitioned and distributed to different nodes for 
+local model updates, and model averaging (reduce) is done every few minibatches. 
+
+We use multiple GPUs for data parallelization, and Message Passing Interface (MPI) for communication between nodes. 
+Natrual Gradient for Stochasitc Gradient Descent (NG-SGD) approach is used to ensure better convergence in this framework. On the
+300h Swithboard dataset, a 12 times speed up is achieved using 16 gpus with no decoding accuracy loss. We also 
+compare all-reduce strategy with butterfly mixing, and show that butterfly mixing can further save communication costs.
 
 \end{abstract}
 %
 \begin{keywords}
-Parallel training, multiple GPUs, neural network, butterfly mixing
+Parallel training, model averaging, deep neural network, butterfly mixing
 \end{keywords}
 %
 \section{Introduction}
@@ -75,7 +79,6 @@ a gradient quantization approach was proposed to minimize communication cost \ci
 DistBelief proposed in \cite{dean2012large} reports a speed up of 2.2x using 8 CPU coresthan using a
 single machine.
 
-
 Asynchronous SGD using multiple GPUs achieved a 3.2x speed-up on 4 GPUs \cite{zhang2013asynchronous}.
 
 A pipeline training approach was propoased in \cite{chen2012pipelined} and a 3.3x speedup was achieved using 4 GPUs, but this
@@ -85,51 +88,124 @@ A speedup of 6x to 14x was achieved using 16 GPUs on training convolutional neur
 each GPU is responsible for a partition of the neural network. This approach is more useful for image classification where 
 local structure of the neural network could be exploited.
 
-Distributed model averaging using CPUs is proposed in \cite{zhang2014improving},
-and a further improvement is done using natural gradient \cite{povey2014parallel}.
+Distributed model averaging using CPUs is proposed in \cite{zhang2014improving}, and a further improvement 
+is done using natural gradient \cite{povey2014parallel}. Our approach is mainly based on this idea, and the main 
+difference between our work and this one is that we are performing neural networks training via MPI. Also,
+we introduce butterfly-mixing strategy for model averaging.
 
+Butterfly mixing was proposed in \cite{zhao2013butterfly} to interleave communication with computation. In each
+reduce period, information (gradient or model) is exchanged between each node and its friend node. The pair of nodes
+are shuffled after every reduce so that information in each node can propagate to all other nodes in 
+$log(numNodes)$ periods.
 
-Butterfly mixing was proposed in \cite{zhao2013butterfly} to interleave communication with computation.
-
+In Section 2 we introduce the model approach. In Section 3 we introduce different reduce strategies. Section 4 
+explains NG-SGD. Section 5 records experimental results on different setups and Section 6 concludes.
 
 \section{Data parallelization and Model Averging}
+Stochastic gradient descent is a popular method for DNN training, even though this is a non-convex optimization 
+problem. Since the size of training data is large, minibatch based SGD is often used for model training. 
+Roughly, the larger the minibatch size, the higher the converge rate. However, a large minibatch requires
+more compute and memory usage, so a straight forward idea for parallelization would be distributing the 
+gradient computation to different computing nodes. In each step, the gradient is reduced to one computing node,
+averaged and then used to update models in each node. This method can compute the gradient accurately, but 
+it requires heavy communication between nodes.
 
-\section{Different Reduce Strategies}
+However, if we choose to reduce the weight rather than gradient, it is not necessary to communicate that often. There
+is straight forward theory that guarantees convergence, but we do observe reasonable results in experiments.
 
-\subsection{Butterfly Mixing}
 
-All printed material, including text, illustrations, and charts, must be kept
-within a print area of 7 inches (178 mm) wide by 9 inches (229 mm) high. Do
-not write or print anything outside the print area. The top margin must be 1
-inch (25 mm), except for the title page, and the left margin must be 0.75 inch
-(19 mm).  All {\it text} must be in a two-column format. Columns are to be 3.39
-inches (86 mm) wide, with a 0.24 inch (6 mm) space between them. Text must be
-fully justified.
+\section{Model Averaging Strategy}
+\subsection{All-reduce}
+All-reduce strategy collects the weights from all the nodes in the network. The communication is bounded by 
+the bandwidth. Fig~\ref{fig:allreduce} is an example of all-reduce with 4 nodes. One node is responsible for
+collecting all the model parameters. It will average the weights and then broadcast it to all the nodes. 
+This approach compute the average weight based on all the information in computing nodes. Thus, we expect 
+the converge speed to be the fastest.
+\begin{figure}[htb]
+  \centering
+  \includegraphics[width=0.42\textwidth]{allreduce.jpg}
+  \caption{All-reduce network}
+  \label{fig:allreduce}
+\end{figure}
 
-\subsection{Ring \& Hopping Ring Reduce}
+\subsection{Butterfly mixing}
+Butterfly mixing is a reduction strategy proposed in \cite{zhao2013butterfly}. It reduces the communication load in 
+every iteration: one node would only send and receive message from one other node. The pairing of nodes are shuffled after
+each reduction so that information collected in each nodes will spread to all other nodes. Fig~\ref{fig:butterfly} 
+is an example of butterfly mixing with 4 nodes. Butterfly mixing requires much less communication than all-reduce 
+strategy. However, each node in the network only collects information from two computing nodes at a time.
+It takes $log(numNodes)$ communication to spread the message to the whole network. Thus, the converge speed 
+of butterfly mixing would be slower than all-reduce strategy. 
+\begin{figure}[htb]
+  \centering
+  \includegraphics[width=0.42\textwidth]{butterfly.jpg}
+  \caption{Butterfly mixing network}
+  \label{fig:butterfly}
+\end{figure}
 
-The paper title (on the first page) should begin 1.38 inches (35 mm) from the
-top edge of the page, centered, completely capitalized, and in Times 14-point,
-boldface type.  The authors' name(s) and affiliation(s) appear below the title
-in capital and lower case letters.  Papers with multiple authors and
-affiliations may require two or more lines for this information. Please note
-that papers should not be submitted blind; include the authors' names on the
-PDF.
+\subsection{Data exchange analysis}
 
 \section{Natural Gradient for Model Update}
+In stochastic gradient descent (SGD), the learning rate is often assumed to be a scalar $\alpha_t$ that may change over time,
+the update formula for model parameters $\theta_{t}$ is
+\begin{equation}
+\theta_{t+1} = \theta_{t} + \alpha_t g_t
+\end{equation}
+where $g_t$ is the gradient.
+
+However, according to Natural Gradient idea \cite{murata1999statistical,roux2008topmoumoute}, it is possible to replace 
+the scalar with a symmetric positive definite matrix $E_t$, which is the inverse of the Fisher information matrix.
+\begin{equation}
+\theta_{t+1} = \theta_{t} + \alpha_t E_t g_t
+\end{equation}
+
+Suppose $x$ is the variable we are modeling, and $f(x;\theta)$ is the probability or likelihood of $x$ given parameters $\theta$, then the
+Fisher information matrix $I(\theta)$ is defined as
+\begin{equation}
+\frac{\partial}{\partial\theta}\log f(x;\theta)
+\end{equation}
+
+For large scale speech recognition, it is impossible to estimate Fisher information matrix and perform inversion, 
+so it is necessary to approximate the inverse Fisher information matrix directly. We do not include too much 
+detail here because this is not the main focus of this report. Details about implementation of NG-SGD could 
+be found in \cite{povey2014parallel}.
+
 
 \section{Experimental Results}
-\subsection{Reduce Frequency}
+\subsection{Setup}
 
-\subsection{Reduce type}
+\subsection{Switchboard}
 
-\subsection{Scaling factor}
+scaling factor
+\begin{figure}[htb]
+  \centering
+  \includegraphics[width=0.5\textwidth]{scaling.png}
+  \caption{Scaling factor and speedup factor v.s. number of gpus}
+  \label{fig:scaling}
+\end{figure}
 
-\section{Conclusion}
+percentage of time spent on communication
+\begin{figure}[htb]
+  \centering
+  \includegraphics[width=0.5\textwidth]{percent.png}
+  \caption{Percentage of time on MPI communication v.s. number of gpus}
+  \label{fig:percent}
+\end{figure}
+
+
+\section{Conclusion and Future Work}
+Neural network training can be efficiently speed up by using model averaging techniques and NG-SGD. 
+Butterfly-mixing and ring reduction can reduce communication time a lot, but the models may not converge as well as 
+Allreduce when the number of jobs goes up to 16.
+
+
+CUDA aware MPI, learning rate schedule.
 
 
 \section{Acknowledgements}
-We would like to thank Forrest Iandola for helpful suggestion.
+We would like to thank Karel Vesely and Daniel Povey who wrote the original "nnet1" neural network training code
+and natural gradient stochastic gradient descent upon which the work here is based. We would also like to thank Nelson 
+Morgan, Forrest Iandola and Yuansi Chen for their helpful suggestions.
 
 % References should be produced using the bibtex program from suitable
 % BiBTeX files (here: strings, refs, manuals). The IEEEbib.bst bibliography

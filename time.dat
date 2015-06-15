@@ -1,0 +1,8 @@
+#     train      comm       train     comm
+GPUs  All-reduce All-reduce Butterfly Butterfly
+1     254.5      0          254.5     0
+2     183.4      19.9       175.6     12.1
+4     96.0       12.9       90.0      6.69
+8     51.0       7.62       46.8      3.39
+16    27.3       4.31       25.2      2.17
+#32
