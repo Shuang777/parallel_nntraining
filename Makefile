@@ -5,7 +5,7 @@ output = inter15
 all: $(type).pdf	
 	cp $(type).pdf ~/Desktop/$(output).pdf
 
-$(type).pdf: $(type).tex $(type).bib scaling.png
+$(type).pdf: $(type).tex $(type).bib scaling.png percent.png allreduce.png butterfly.png
 	pdflatex $(type)
 	bibtex $(type)
 	pdflatex $(type)

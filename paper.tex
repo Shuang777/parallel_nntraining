@@ -12,7 +12,7 @@
 
 % Title.
 % ------
-\title{Parallel Training of Deep Neural Network using Model Averaging and Butterfly Mixing}
+\title{Investigation on Parallel Training of Deep Neural Network using Model Averaging}
 %
 % Single address.
 % ---------------
@@ -53,9 +53,11 @@ Parallelization is done in a model averaging manner. Data is partitioned and dis
 local model updates, and model averaging (reduce) is done every few minibatches. 
 
 We use multiple GPUs for data parallelization, and Message Passing Interface (MPI) for communication between nodes. 
-Natrual Gradient for Stochasitc Gradient Descent (NG-SGD) approach is used to ensure better convergence in this framework. On the
-300h Swithboard dataset, a 12 times speed up is achieved using 16 gpus with no decoding accuracy loss. We also 
-compare all-reduce strategy with butterfly mixing, and show that butterfly mixing can further save communication costs.
+We investigate the effectiveness of Natrual Gradient for Stochasitc Gradient Descent (NG-SGD) in the model averaging
+framework, and compare two learning rate schedule strategies for model update. We show that combination of 
+NG-SGD and exponential learning rate schedule can lead to better convergence. On the 300h Swithboard dataset, a 10 
+times speed up is achieved using 16 gpus with little decoding accuracy loss -- 0.2 in word error rate (WER). We also 
+introduce a butterfly mixing strategy that can further save communication costs in model averaging framework.
 
 \end{abstract}
 %
@@ -123,7 +125,7 @@ This approach compute the average weight based on all the information in computi
 the converge speed to be the fastest.
 \begin{figure}[htb]
   \centering
-  \includegraphics[width=0.42\textwidth]{allreduce.jpg}
+  \includegraphics[width=0.5\textwidth]{allreduce.png}
   \caption{All-reduce network}
   \label{fig:allreduce}
 \end{figure}
@@ -138,7 +140,7 @@ It takes $log(numNodes)$ communication to spread the message to the whole networ
 of butterfly mixing would be slower than all-reduce strategy. 
 \begin{figure}[htb]
   \centering
-  \includegraphics[width=0.42\textwidth]{butterfly.jpg}
+  \includegraphics[width=0.5\textwidth]{butterfly.png}
   \caption{Butterfly mixing network}
   \label{fig:butterfly}
 \end{figure}
@@ -170,9 +172,14 @@ so it is necessary to approximate the inverse Fisher information matrix directly
 detail here because this is not the main focus of this report. Details about implementation of NG-SGD could 
 be found in \cite{povey2014parallel}.
 
+\section{Initialization}
+Conjecture: dbn pretraining initialize the neural network such that it lies in a convex-like area
 
 \section{Experimental Results}
 \subsection{Setup}
+
+\subsection{Learing Rate Schedule}
+
 
 \subsection{Switchboard}
 
@@ -191,6 +198,21 @@ percentage of time spent on communication
   \caption{Percentage of time on MPI communication v.s. number of gpus}
   \label{fig:percent}
 \end{figure}
+
+\begin{table}
+  \centering
+  \begin{tabular}{c|c|c|c|c|c}
+    \hline
+     Nodes  & 1    & 2    & 4    & 8    & 16 \\
+    \hline
+Allreduce &    14.9 & -- & -- & 15.1 & 15.1 \\
+    \hline
+Butterfly &    14.9 & -- & -- & -- & --\\
+    \hline
+  \end{tabular}
+  \caption{Comparison of WERs using different number of GPUs }
+  \label{tab:wer}
+\end{table}
 
 
 \section{Conclusion and Future Work}
