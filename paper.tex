@@ -12,7 +12,7 @@
 
 % Title.
 % ------
-\title{Investigation on Parallel Training of Deep Neural Network using Model Averaging}
+\title{Parallel Training of Deep Neural Network using Model Averaging and Butterfly Mixing}
 %
 % Single address.
 % ---------------
@@ -56,9 +56,8 @@ We use multiple GPUs for data parallelization, and Message Passing Interface (MP
 We investigate the effectiveness of Natrual Gradient for Stochasitc Gradient Descent (NG-SGD) in the model averaging
 framework, and compare two learning rate schedule strategies for model update. We show that combination of 
 NG-SGD and exponential learning rate schedule can lead to better convergence. On the 300h Swithboard dataset, a 10 
-times speed up is achieved using 16 gpus with little decoding accuracy loss -- 0.2 in word error rate (WER). We also 
-introduce a butterfly mixing strategy that can further save communication costs in model averaging framework.
-
+times speed up is achieved using 16 gpus with little decoding accuracy loss -- a 0.2\% degradation in word error rate 
+(WER). We also introduce a butterfly mixing strategy that can further save communication costs in model averaging framework.
 \end{abstract}
 %
 \begin{keywords}
@@ -71,36 +70,45 @@ Deep Neural Networks (DNN) has shown its effeciveness in several machine learnin
 recognition. The large model size and massive training examples make DNN a powerful model for classification. However,
 these two factors also slow down the training procedure of DNNs.
 
-Parallelization of DNN training has been a popular topic since the revive of neural networks. Several different strategies
-have been proposed to tackle this problem. Multiple thread CPU parallelization and single CUDA GPU implementation are compared
-in \cite{scanzio2010parallel,vesely2010parallel}, and they show that single GPU could beat 8 cores CPU by a factor of 2.
+Parallelization of DNN training has been a popular topic since the revival of neural networks. Several different strategies
+have been proposed to tackle this problem. Multiple thread CPU parallelization and single GPU implementation are compared
+in \cite{scanzio2010parallel,vesely2010parallel}, and it is shown that single GPU could beat multi-threaded CPU implementation
+by a factor of 2.
 
 Optimality for parallelization of DNN training was analyzed in \cite{seide2014parallelizability}, and based on the analysis, 
-a gradient quantization approach was proposed to minimize communication cost \cite{seide20141}.
+a gradient quantization approach (1-bit SGD) was proposed to minimize communication cost \cite{seide20141}. It shows that 1 bit
+can effectively reduce the amount of data exchanged in an MPI framework, and a 10 times speed-up using 40 GPUs.
 
-DistBelief proposed in \cite{dean2012large} reports a speed up of 2.2x using 8 CPU coresthan using a
-single machine.
-
-Asynchronous SGD using multiple GPUs achieved a 3.2x speed-up on 4 GPUs \cite{zhang2013asynchronous}.
+DistBelief proposed in \cite{dean2012large} reports that 8 CPU machines train 2.2 times faster than a single GPU machine on a
+moderately sized speech model. Asynchronous SGD using multiple GPUs achieved a 3.2x speed-up on 4 GPUs \cite{zhang2013asynchronous}.
 
 A pipeline training approach was propoased in \cite{chen2012pipelined} and a 3.3x speedup was achieved using 4 GPUs, but this
 method does not scale beyond number of layers in the neural network.
 
 A speedup of 6x to 14x was achieved using 16 GPUs on training convolutional neural networks \cite{coates2013deep}. In this approach,
 each GPU is responsible for a partition of the neural network. This approach is more useful for image classification where 
-local structure of the neural network could be exploited.
+local structure of the neural network could be exploited. For a fully connected speech model, a model partition approach 
+may not be able to contribute as much.
 
 Distributed model averaging using CPUs is proposed in \cite{zhang2014improving}, and a further improvement 
-is done using natural gradient \cite{povey2014parallel}. Our approach is mainly based on this idea, and the main 
-difference between our work and this one is that we are performing neural networks training via MPI. Also,
-we introduce butterfly-mixing strategy for model averaging.
+is done using natural gradient \cite{povey2014parallel}. In this approach, separate models are trained on multiple nodes using 
+different partitions of data, and model parameters are averaged after each epoch. It is shown that NG-SGD can effectively improve
+convergence and ensure a better model trained using the model averaging framework.
 
-Butterfly mixing was proposed in \cite{zhao2013butterfly} to interleave communication with computation. In each
-reduce period, information (gradient or model) is exchanged between each node and its friend node. The pair of nodes
-are shuffled after every reduce so that information in each node can propagate to all other nodes in 
-$log(numNodes)$ periods.
+Our approach is mainly based on the NG-SGD with model averaging. The main differences here in this work are:
+1. We utilize multiple GPUs in neural networks training via MPI, which allows us to perform model averaging more frequently and efficiently;
+2. We introduce a butterfly-mixing strategy for model averaging that can further speed up the training.
 
-In Section 2 we introduce the model approach. In Section 3 we introduce different reduce strategies. Section 4 
+In addition, this work simplifies the model training procedure in the following aspects:
+1. It does not require a warm-up phase where only single thread can be used for model update \cite{seide20141,povey2014parallel};
+2. It does not need to tune minibatch size to utilize parallelization power;
+3. It does not use momentum or Adagrad\cite{duchi2011adaptive} for gradient estimation.
+
+On the other hand, it requires:
+1. A proper implementation of NG-SGD, as is introduced in \cite{povey2014parallel};
+2. A bigger initial learning rate and a proper model averaging frequency;
+
+In Section 2 we introduce the model averaging approach. In Section 3 we introduce butterfly-mixing strategie. Section 4 
 explains NG-SGD. Section 5 records experimental results on different setups and Section 6 concludes.
 
 \section{Data parallelization and Model Averging}
@@ -131,6 +139,11 @@ the converge speed to be the fastest.
 \end{figure}
 
 \subsection{Butterfly mixing}
+Butterfly mixing was proposed in \cite{zhao2013butterfly} to interleave communication with computation. In each
+reduce period, information (gradient / model) is exchanged between each node and its friend node. The pair of nodes
+are shuffled after every reduce so that information in each node can propagate to all other nodes in $log(numNodes)$ periods.
+
+
 Butterfly mixing is a reduction strategy proposed in \cite{zhao2013butterfly}. It reduces the communication load in 
 every iteration: one node would only send and receive message from one other node. The pairing of nodes are shuffled after
 each reduction so that information collected in each nodes will spread to all other nodes. Fig~\ref{fig:butterfly} 

@@ -4,3 +4,6 @@
 *.bbl
 *.aux
 *.dvi
+*.png
+percent.dat
+scaling.dat
