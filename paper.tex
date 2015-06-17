@@ -90,8 +90,8 @@ each GPU is responsible for a partition of the neural network. This approach is 
 local structure of the neural network could be exploited. For a fully connected speech model, a model partition approach 
 may not be able to contribute as much.
 
-Distributed model averaging using CPUs is proposed in \cite{zhang2014improving}, and a further improvement 
-is done using natural gradient \cite{povey2014parallel}. In this approach, separate models are trained on multiple nodes using 
+Distributed model averaging is used in \cite{zhang2014improving,miao2014distributed}, and a further improvement 
+is done using NG-SGD \cite{povey2014parallel}. In this approach, separate models are trained on multiple nodes using 
 different partitions of data, and model parameters are averaged after each epoch. It is shown that NG-SGD can effectively improve
 convergence and ensure a better model trained using the model averaging framework.
 
@@ -112,17 +112,25 @@ In Section 2 we introduce the model averaging approach. In Section 3 we introduc
 explains NG-SGD. Section 5 records experimental results on different setups and Section 6 concludes.
 
 \section{Data parallelization and Model Averging}
-Stochastic gradient descent is a popular method for DNN training, even though this is a non-convex optimization 
-problem. Since the size of training data is large, minibatch based SGD is often used for model training. 
-Roughly, the larger the minibatch size, the higher the converge rate. However, a large minibatch requires
-more compute and memory usage, so a straight forward idea for parallelization would be distributing the 
-gradient computation to different computing nodes. In each step, the gradient is reduced to one computing node,
-averaged and then used to update models in each node. This method can compute the gradient accurately, but 
-it requires heavy communication between nodes.
+SGD is a popular method for DNN training. Even though neural network training objectives are usually non-convex, 
+mini-batch SGD has been shown to be effective for optimizing the objective\cite{seide2011conversational}. 
+Roughly speaking, a bigger minibatch size gives a better estimate of the gradient, resulting in a better the converge rate. 
+Thus, a straight forward idea for parallellization would be distributing the gradient computation to different computing
+nodes. In each step, gradients of minibatches on different nodes are reduced to a single node, averaged and then used to 
+update models in each node. This method can compute the gradient accurately, but it requires heavy communication between nodes.
+Also, it is shown that increasing minibatch size does not always benefit model training\cite{}, especially in early stage 
+of model training.
 
-However, if we choose to reduce the weight rather than gradient, it is not necessary to communicate that often. There
-is straight forward theory that guarantees convergence, but we do observe reasonable results in experiments.
+On the other hand, if we choose to average the parameters rather than gradients, it is not necessary to exchange data that often. 
+Currently, there is no straight forward theory that guarantees convergence, but we would like to explore a bit why this strategy 
+shoule work, just as we observe in the experiments.
 
+First, in the extreme case where model parameters are averaged after each minibatch update, model averaging is equivalent to 
+gradient averaging. If we view the difference of model parameters as gradient in a special space.
+
+Second, it is shown that model averging for convex models is guaranteed to converge \cite{mcdonald2010distributed,mcdonald2009efficient}.
+It is suggested that unsupervised pretraining guides the learning towards basins of attraction of minima that support better generalization
+from the training data set; \cite{erhan2010does}.
 
 \section{Model Averaging Strategy}
 \subsection{All-reduce}
@@ -138,11 +146,12 @@ the converge speed to be the fastest.
   \label{fig:allreduce}
 \end{figure}
 
+MPI implementation
+
 \subsection{Butterfly mixing}
 Butterfly mixing was proposed in \cite{zhao2013butterfly} to interleave communication with computation. In each
 reduce period, information (gradient / model) is exchanged between each node and its friend node. The pair of nodes
 are shuffled after every reduce so that information in each node can propagate to all other nodes in $log(numNodes)$ periods.
-
 
 Butterfly mixing is a reduction strategy proposed in \cite{zhao2013butterfly}. It reduces the communication load in 
 every iteration: one node would only send and receive message from one other node. The pairing of nodes are shuffled after
@@ -157,6 +166,8 @@ of butterfly mixing would be slower than all-reduce strategy.
   \caption{Butterfly mixing network}
   \label{fig:butterfly}
 \end{figure}
+
+MPI implementation
 
 \subsection{Data exchange analysis}
 
@@ -185,17 +196,50 @@ so it is necessary to approximate the inverse Fisher information matrix directly
 detail here because this is not the main focus of this report. Details about implementation of NG-SGD could 
 be found in \cite{povey2014parallel}.
 
-\section{Initialization}
-Conjecture: dbn pretraining initialize the neural network such that it lies in a convex-like area
-
 \section{Experimental Results}
 \subsection{Setup}
 
+Reduce frequency
+
 \subsection{Learing Rate Schedule}
+Why do we need a large learning rate?
 
 
-\subsection{Switchboard}
 
+\subsection{Initialization Matters}
+Compare random init and dbn init, single and paralle
+\begin{table}
+  \centering
+  \begin{tabular}{c|c|c}
+    \hline
+     Nodes          &  1    & 16 \\
+    \hline
+    random init     & --    & --  \\
+    \hline
+    rbm pretraining & --    & --\\
+    \hline
+  \end{tabular}
+  \caption{Comparing rbm pretraining with random initialization in model averaging setup }
+  \label{tab:init}
+\end{table}
+
+\subsection{Online NG-SGD Matters}
+\begin{table}
+  \centering
+  \begin{tabular}{c|c|c}
+    \hline
+     Nodes  &  1    & 16 \\
+    \hline
+    SGD     & --    & --  \\
+    \hline
+    NG-SGD  & --    & --\\
+    \hline
+  \end{tabular}
+  \caption{Comparing NG-SGD and naive SGD}
+  \label{tab:ngsgd}
+\end{table}
+
+\subsection{Speedup Comparison}
 scaling factor
 \begin{figure}[htb]
   \centering
