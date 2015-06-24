@@ -4,7 +4,7 @@ set logscale x 2
 set term png font 11
 
 set yr [0:25]
-set xr [1:18]
+set xr [1:32]
 set xlabel "Number of GPUs"
 set ylabel "Percentage of time on MPI"
 set format y "%g"

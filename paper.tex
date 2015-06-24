@@ -12,7 +12,7 @@
 
 % Title.
 % ------
-\title{Parallel Training of Deep Neural Network using Model Averaging and Butterfly Mixing}
+\title{Investigation on Parallel Training of Deep Neural Network using Model Averaging}
 %
 % Single address.
 % ---------------
@@ -48,16 +48,17 @@ $^3$ Nanyang Technological University, Singapore \\
 \maketitle
 %
 \begin{abstract}
-In this paper we apply model averaging and butterfly mixing to parallel training of deep neural network (DNN). 
+In this paper we apply model averaging to parallel training of deep neural network (DNN). 
 Parallelization is done in a model averaging manner. Data is partitioned and distributed to different nodes for 
-local model updates, and model averaging (reduce) is done every few minibatches. 
+local model updates, and model averaging across nodes is done every few minibatches. 
 
 We use multiple GPUs for data parallelization, and Message Passing Interface (MPI) for communication between nodes. 
 We investigate the effectiveness of Natrual Gradient for Stochasitc Gradient Descent (NG-SGD) in the model averaging
-framework, and compare two learning rate schedule strategies for model update. We show that combination of 
-NG-SGD and exponential learning rate schedule can lead to better convergence. On the 300h Swithboard dataset, a 10 
-times speed up is achieved using 16 gpus with little decoding accuracy loss -- a 0.2\% degradation in word error rate 
-(WER). We also introduce a butterfly mixing strategy that can further save communication costs in model averaging framework.
+framework, and compare two learning rate schedule strategies for model update. It is shown that NG-SGD leads to better
+convergence in model averaging framework. On the 300h Swithboard dataset, a 10 times speedup is achieved using 16 GPUs
+and 17 times speedup using 32 GPUs with a small decoding accuracy loss -- 0.4\% degradation in word error rate 
+(WER) respectively. We also introduce a butterfly mixing strategy that can further save communication costs in model 
+averaging framework.
 \end{abstract}
 %
 \begin{keywords}
@@ -95,14 +96,11 @@ is done using NG-SGD \cite{povey2014parallel}. In this approach, separate models
 different partitions of data, and model parameters are averaged after each epoch. It is shown that NG-SGD can effectively improve
 convergence and ensure a better model trained using the model averaging framework.
 
-Our approach is mainly based on the NG-SGD with model averaging. The main differences here in this work are:
-1. We utilize multiple GPUs in neural networks training via MPI, which allows us to perform model averaging more frequently and efficiently;
-2. We introduce a butterfly-mixing strategy for model averaging that can further speed up the training.
-
-In addition, this work simplifies the model training procedure in the following aspects:
-1. It does not require a warm-up phase where only single thread can be used for model update \cite{seide20141,povey2014parallel};
-2. It does not need to tune minibatch size to utilize parallelization power;
-3. It does not use momentum or Adagrad\cite{duchi2011adaptive} for gradient estimation.
+Our approach is mainly based on the NG-SGD with model averaging. We utilize multiple GPUs in neural networks training via 
+MPI, which allows us to perform model averaging more frequently and efficiently. Currently, this work simplifies the model 
+training procedure in the following aspects:
+1. It does not add a warm-up phase where only single thread is used for model update \cite{seide20141,povey2014parallel};
+2. It does not tune minibatch size to utilize parallelization power;
 
 On the other hand, it requires:
 1. A proper implementation of NG-SGD, as is introduced in \cite{povey2014parallel};
@@ -118,8 +116,8 @@ Roughly speaking, a bigger minibatch size gives a better estimate of the gradien
 Thus, a straight forward idea for parallellization would be distributing the gradient computation to different computing
 nodes. In each step, gradients of minibatches on different nodes are reduced to a single node, averaged and then used to 
 update models in each node. This method can compute the gradient accurately, but it requires heavy communication between nodes.
-Also, it is shown that increasing minibatch size does not always benefit model training\cite{}, especially in early stage 
-of model training.
+Also, it is shown that increasing minibatch size does not always benefit model training\cite{seide2011conversational}, 
+especially in early stage of model training.
 
 On the other hand, if we choose to average the parameters rather than gradients, it is not necessary to exchange data that often. 
 Currently, there is no straight forward theory that guarantees convergence, but we would like to explore a bit why this strategy 
@@ -134,7 +132,7 @@ from the training data set; \cite{erhan2010does}.
 
 \section{Model Averaging Strategy}
 \subsection{All-reduce}
-All-reduce strategy collects the weights from all the nodes in the network. The communication is bounded by 
+All-reduce strategy collects the weights from all the nodes. The communication is bounded by 
 the bandwidth. Fig~\ref{fig:allreduce} is an example of all-reduce with 4 nodes. One node is responsible for
 collecting all the model parameters. It will average the weights and then broadcast it to all the nodes. 
 This approach compute the average weight based on all the information in computing nodes. Thus, we expect 
@@ -146,7 +144,7 @@ the converge speed to be the fastest.
   \label{fig:allreduce}
 \end{figure}
 
-MPI implementation
+This operation could be easily implemented by MPI\_Allreduce
 
 \subsection{Butterfly mixing}
 Butterfly mixing was proposed in \cite{zhao2013butterfly} to interleave communication with computation. In each
@@ -198,41 +196,107 @@ be found in \cite{povey2014parallel}.
 
 \section{Experimental Results}
 \subsection{Setup}
+In this paper, we report speech recognition results on the 300 hour Switchboard conversational telephone speech task 
+(Switchboard-1 Release 2). We use MSU-ISIP release of the Switchboard segmentations and transcriptions (date 11/26/02),
+together with the Mississippi State transcripts2 and the 30Kword lexicon released with those transcripts. 
+The lexicon contains pronunciations for all words and word fragments in the training data. We use the Hub5 ’00 data for
+evaluation. Specifically, we use the  the development set and Hub5 ’01 (LDC2002S13) data as a separate test set.
 
-Reduce frequency
+The Kaldi toolkit\cite{kaldi11} is used for speech recognition framework. Standard 13-dim PLP feature,
+together with 3-dim Kaldi pitch feature, is extracted and used for maximum
+likelihood GMM model training. Features are then transformed using LDA+MLLT before SAT training.
+After GMM training is done, a tanh-neuron DNN-HMM hybrid system is trained using the the 40-dimension 
+transformed fMLLR (also known as CMLLR \cite{gales1996generation}) feature as input and GMM-aligned senones 
+as targets. fMLLR is estimated in an EM fashion for both training data and test data. A trigram language model (LM) is trained 
+on 3M words of the training transcripts only.
+
+Work in this paper is built on top of the Kaldi nnet1 setup and the NG-SGD method introduced in nnet2 setup. 
+Details of DNN training follows Section 2.2 in \cite{vesely2013sequence}. In this paper, we use 6 hidden layers, where each 
+hidden layer has 2048 neurons with sigmoids. Input layer is 440 dimension (i.e. the context of 11 fMLLR frames), 
+and output layer is 8806 dimension. Mini-batch SGD is used for backpropagation and the minibatch is set to 1024 for all
+the experiments. By defult, DNNs are initialized with stacked restricted Boltzmann machines (RBMs) that are pretrained 
+in a greedy layerwise fashion \cite{hinton2006fast}. Comparison between random initialization and RBM-initialization 
+in model averaging framework is reported in Section~\ref{sec:init}.
+
+The server hardware used in this work is Stampede (TACC) (URL: https://portal.xsede.org/tacc-stampede). It is a Dell Linux 
+cluster provided as an Extreme Science Engineering Discovery Environment (XSEDE) digital service by the Texas Advanced 
+Computing Center (TACC). Stampede is configured with 6,400 Dell DCS Zeus compute nodes, the majority of which are configured
+with two 2.7 GHz E5-2680 Intel Xeon (Sandy Bridge) processors and one Intel Xeon Phi SE10P coprocessor. 128 of the nodes are 
+augmented with an NVIDIA K20 GPU and 8 GB of GDDR5 memory each, which we use for neural network training in this work.
+Stampede nodes run Linux 2.6.32 with batch services managed by the Simple Linux Utility for Resource Management (SLURM).
+
+\subsection{Averaging frequency}
+Due to the limitation of computing resource, we did not tune averaging frequency in our setup. It is set to 1 averaging
+per 20 minibatches by default. We would expect a tradeoff between lower averaging frequency (i.e. better speedup) and
+better training accuracy. But the optimal point is yet to be explored.
 
 \subsection{Learing Rate Schedule}
-Why do we need a large learning rate?
+Initial learning rate is increased in porportion to number of threads in this setup. The reason for this is straight forward:
+Assume we have $n$ minibatches of data for model training. When the model is trained using single thread, it gets updated $n$
+times. When data is distributed to $m$ machines, then each model gets updated $n/m$ times. Since the effect of model averaging 
+is mostly aggregating knowledge learnt from different data partition, the absolute change of model shall be compensated by 
+$m$ times.
 
+We compare two learning rate schedules in this section. The first one is the default setup used in Kaldi nnet1 (Newbob). 
+It starts with a initial learning rate of 0.32 and halves the rate when the improvement in frame accuracy on a cross-validation 
+set between two successive epochs falls below 0.5\%. The optimization terminates when the frame accuracy increases by less 
+than 0.1\%. Cross-validation is done on 10\% of the utterances that are held out from the training data.
 
+The second learing rate schedule is exponentially decaying. This method is used in \cite{senior2013empirical,povey2014parallel} 
+and is shown to be superior to performance scheduling and power scheduling. In this work, it starts with the same initial learning
+rate as the first method (Newbob), and decrease to the final learning rate (which is set to be 0.01 * initial learning rate). The
+number of epochs is set to $15$ in this task, which is set to be the same as Newbob scheduling.
 
-\subsection{Initialization Matters}
-Compare random init and dbn init, single and paralle
 \begin{table}
   \centering
-  \begin{tabular}{c|c|c}
+  \begin{tabular}{c|c|c|c|c}
     \hline
-     Nodes          &  1    & 16 \\
+    & \multicolumn{2}{c|}{SWB}  & \multicolumn{2}{c}{CallHome} \\
     \hline
-    random init     & --    & --  \\
+    Nodes       &  1      & 16    &  1    & 16 \\
     \hline
-    rbm pretraining & --    & --\\
+    Newbob      & 14.9    & 15.4  & 26.6  & 27.2 \\
+    \hline
+    exponential & 14.7    & 15.1  & 26.8  & 27.0 \\
     \hline
   \end{tabular}
-  \caption{Comparing rbm pretraining with random initialization in model averaging setup }
+  \caption{Comparing learning rate schedule}
+  \label{tab:init}
+\end{table}
+
+\subsection{Initialization Matters}
+\label{sec:init}
+Compare random init and dbn init, single and parallell.
+
+\begin{table}
+  \centering
+  \begin{tabular}{c|c|c|c|c}
+    \hline
+    & \multicolumn{2}{c|}{SWB}  & \multicolumn{2}{c}{CallHome} \\
+    \hline
+    Nodes          &  1     & 32     &   1    & 32\\
+    \hline
+    random init     & RR    & 16.4   &  RR    & 28.8 \\
+    \hline
+    rbm pretraining & 14.7  & 15.2   & 26.8   & 27.1 \\
+    \hline
+  \end{tabular}
+  \caption{Comparing rbm pretraining with random initialization}
   \label{tab:init}
 \end{table}
 
 \subsection{Online NG-SGD Matters}
 \begin{table}
   \centering
-  \begin{tabular}{c|c|c}
+  \begin{tabular}{c|c|c|c|c}
     \hline
-     Nodes  &  1    & 16 \\
+    & \multicolumn{2}{c|}{SWB}  & \multicolumn{2}{c}{CallHome} \\
     \hline
-    SGD     & --    & --  \\
+     Nodes  &  1    & 16        &   1   &  16 \\
     \hline
-    NG-SGD  & --    & --\\
+    SGD     & 14.9    & 16.3    &  26.9 & 28.3 \\
+    \hline
+    NG-SGD  & 14.7    & 15.1    &  26.8 & 27.0  \\
     \hline
   \end{tabular}
   \caption{Comparing NG-SGD and naive SGD}
@@ -258,33 +322,37 @@ percentage of time spent on communication
 
 \begin{table}
   \centering
-  \begin{tabular}{c|c|c|c|c|c}
+  \begin{tabular}{c|c|c|c|c|c|c}
     \hline
-     Nodes  & 1    & 2    & 4    & 8    & 16 \\
+     Nodes  & 1    & 2    & 4    & 8    & 16 & 32\\
     \hline
-Allreduce &    14.9 & -- & -- & 15.1 & 15.1 \\
+Allreduce &    14.7 & -- & -- & 15.1 & 15.1   & 15.2\\
     \hline
-Butterfly &    14.9 & -- & -- & -- & --\\
+Butterfly &    14.7 & -- & -- & --   & 15.6   & 16.0\\
     \hline
   \end{tabular}
   \caption{Comparison of WERs using different number of GPUs }
   \label{tab:wer}
 \end{table}
 
+It is shown that this is
 
 \section{Conclusion and Future Work}
 Neural network training can be efficiently speed up by using model averaging techniques and NG-SGD. 
 Butterfly-mixing and ring reduction can reduce communication time a lot, but the models may not converge as well as 
 Allreduce when the number of jobs goes up to 16.
 
-
-CUDA aware MPI, learning rate schedule.
+Further improvement might be achieved if parallel training runs on top of serial training initialization.
+CUDA aware MPI, learning rate schedule. Averaging frequency. Theory on convergence.
 
 
 \section{Acknowledgements}
 We would like to thank Karel Vesely and Daniel Povey who wrote the original "nnet1" neural network training code
 and natural gradient stochastic gradient descent upon which the work here is based. We would also like to thank Nelson 
-Morgan, Forrest Iandola and Yuansi Chen for their helpful suggestions.
+Morgan, Forrest Iandola and Yuansi Chen for their helpful suggestions. 
+
+We acknowledge the Texas Advanced Computing Center (TACC) at The University of Texas at Austin for providing 
+HPC resources that have contributed to the research results reported within this paper (URL: http://www.tacc.utexas.edu).
 
 % References should be produced using the bibtex program from suitable
 % BiBTeX files (here: strings, refs, manuals). The IEEEbib.bst bibliography

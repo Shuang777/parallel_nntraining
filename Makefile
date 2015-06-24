@@ -1,6 +1,6 @@
 
 type = paper
-output = inter15
+output = asru15
 
 all: $(type).pdf	
 	cp $(type).pdf ~/Desktop/$(output).pdf
@@ -11,10 +11,10 @@ $(type).pdf: $(type).tex $(type).bib scaling.png percent.png allreduce.png butte
 	pdflatex $(type)
 	pdflatex $(type)
 
-scaling.png: scaling.dat
+scaling.png: scaling.dat scaling.gnu
 	gnuplot scaling.gnu
 
-percent.png: percent.dat
+percent.png: percent.dat percent.gnu
 	gnuplot percent.gnu
 
 scaling.dat: time.dat
