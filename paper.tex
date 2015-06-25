@@ -104,13 +104,26 @@ In this work, we conduct a lot of experiments and compare different setups in mo
 In Section 2, we introduce related works on NG-SGD. Section 3 describe the model averaging approach and some 
 intuition on the analysis. Section 4 records experimental results on different setups and Section 5 concludes.
 
+\section{Relationship to Prior Works}
+To avoid confusion, we should mention that Kaldi\cite{kaldi11} contains two neural network recipes. The first implementation
+\footnote{Location in code: src/\{nnet,nnetbin\}} is described in \cite{vesely2013sequence} which supports Restricted Boltzmann Machine 
+pretraining \cite{hinton2006fast} and sequence-discriminative training \cite{povey2008boosted}. It uses single GPU 
+for SGD training. The second implementation \footnote{Location in code: src/{nnet2,nnet2bin}}
+\cite{zhang2014improving} was originally designed to support parallel training on multiple CPUs. Now it also supports 
+multiple GPUs for training using model averaging. By default, it uses layer-wise discriminative pretraining.
+
+Our work extends the first implementation so that it can utilize multiple GPUs using model averaging. We use MPI 
+in implementation, so file I/O is avoided during model averaging. This allows us to perform model averaging much
+more frequently. 
+
 \section{Data parallelization and Model Averging}
 SGD is a popular method for DNN training. Even though neural network training objectives are usually non-convex, 
 mini-batch SGD has been shown to be effective for optimizing the objective\cite{seide2011conversational}. 
 Roughly speaking, a bigger minibatch size gives a better estimate of the gradient, resulting in a better the converge rate. 
 Thus, a straight forward idea for parallellization would be distributing the gradient computation to different computing
 nodes. In each step, gradients of minibatches on different nodes are reduced to a single node, averaged and then used to 
-update models in each node. This method can compute the gradient accurately, but it requires heavy communication between nodes.
+update models in each node. This method, i.e. gradient averaging, can compute the gradient accurately, but it requires 
+heavy communication between nodes.
 Also, it is shown that increasing minibatch size does not always benefit model training\cite{seide2011conversational}, 
 especially in early stage of model training.
 
@@ -203,33 +216,33 @@ augmented with an NVIDIA K20 GPU and 8 GB of GDDR5 memory each, which we use for
 Stampede nodes run Linux 2.6.32 with batch services managed by the Simple Linux Utility for Resource Management (SLURM).
 
 \subsection{Switchboard Results}
-scaling factor
+Fig.~\ref{fig:scaling} shows the scaling factor and speedup plot for model averaging experiments. As is shown in the graph,
+a speedup of 17 could be achieved when 32 GPUs are used.
 \begin{figure}[htb]
   \centering
   \includegraphics[width=0.5\textwidth]{scaling.png}
   \caption{Scaling factor and speedup factor v.s. number of gpus}
   \label{fig:scaling}
 \end{figure}
-
+Table~\ref{tab:wer} shows the main decoding results for DNNs trained using different number of GPUs. In general, decoding
+results of DNNs trained model averaging degrades 0.3\~0.4 WER, depending on the number of GPUs used.
 \begin{table}
   \centering
   \begin{tabular}{c|c|c|c|c|c|c}
     \hline
      Nodes  & 1    & 2    & 4   & 8      & 16     & 32\\
     \hline
-    SWB     & 14.7 & --   & --  & 15.1   & 15.1   & 15.2\\
-    CallHM  & 26.8 & --   & --  & 27.4   & 27.0   & 27.1 \\
+    SWB     & 14.7 & 14.9 & --  & 15.1   & 15.1   & 15.2\\
+    CallHM  & 26.8 & 26.8 & --  & 27.4   & 27.0   & 27.1 \\
     \hline
   \end{tabular}
   \caption{Comparison of WERs using different number of GPUs}
   \label{tab:wer}
 \end{table}
 
-It is shown that this is
-
 \subsection{Initialization Matters}
 \label{sec:init}
-Compare random init and dbn init.
+Table~\ref{tab:init} compares random initialization with Restricted Boltzmann Machine (RBM) based initialization.
 
 \begin{table}
   \centering
@@ -239,21 +252,24 @@ Compare random init and dbn init.
     \hline
     Nodes          &  1     & 32     &   1    & 32\\
     \hline
-    random init     & RR    & 16.4   &  RR    & 28.8 \\
+    random init     & --    & 16.4   &  --    & 28.8 \\
     \hline
-    rbm pretraining & 14.7  & 15.2   & 26.8   & 27.1 \\
+    RBM pretraining & 14.7  & 15.2   & 26.8   & 27.1 \\
     \hline
   \end{tabular}
-  \caption{Comparing rbm pretraining with random initialization}
+  \caption{Comparing RBM pretraining with random initialization}
   \label{tab:init}
 \end{table}
+As we can see in the table, random initialization is worse than RBM pretraining based DNN by xx in single GPU case.
+In model averaging setup, random initialization becomes even worse -- a xx point more degradation on WER.
 
 \subsection{Averaging frequency}
 Averaging frequency here is defined as the number of minibatch-SGD performed per model averaging.
 Due to the limitation of computing resource, we only did preliminary experiments on this. Minibatch size of 1024 
-is set as default, and we compare averaging frequency of 10 and 20. It is shown that an averaging frequency of 10 gives
-slight worse speedup but a better decoding WER. The tradeoff between lower averaging frequency (i.e. better speedup) and
-better training accuracy is within expectation in that frequent model averaging means steady gradient estimation.
+is set as default, and we compare averaging frequency of 10 and 20. It is shown in Table~\ref{tab:freq} that an averaging 
+frequency of 10 gives slight worse speedup but a better decoding WER. The tradeoff between lower averaging frequency 
+(i.e. better speedup) and better training accuracy is within expectation in that frequent model averaging means 
+steady gradient estimation.
 
 \begin{table}
   \centering
@@ -269,30 +285,31 @@ better training accuracy is within expectation in that frequent model averaging 
     \hline
   \end{tabular}
   \caption{Comparing different averaging frequencies}
-  \label{tab:init}
+  \label{tab:freq}
 \end{table}
 
 \subsection{Minibatch Size}
+Table~\ref{tab:mbsize} compares two different minibatch size in model averaging setup. It is shown that.
 \begin{table}
   \centering
   \begin{tabular}{c|c|c|c|c|c}
     \hline
-    & \multicolumn{2}{c|}{SWB}    & \multicolumn{2}{c}{CallHome} & Speedup\\
+    & \multicolumn{2}{c|}{SWB}    & \multicolumn{2}{c|}{CallHome} & Speedup\\
     \hline
-    nodes       &  1    &   16    &    1       &   16   &    \\
+    nodes       &  1    &   16    &    1     &   16   &    \\
     \hline
-    256         &  --      &   &  --     &   & \\
+    256         &  --      &      &  --      &        & \\
     \hline
-    1024        & 9.32     & 15.1  & 27.0     &   & \\
+    1024        & 9.32     & 15.1 & 27.0     &        & \\
     \hline
   \end{tabular}
   \caption{Comparing different minibatch size}
-  \label{tab:init}
+  \label{tab:mbsize}
 \end{table}
 
-
 \subsection{Learing Rate Schedule}
-Initial learning rate is increased in porportion to number of threads in this setup. The reason for this is straight forward:
+Initial learning rate is increased in porportion to number of threads in model averaging setup. The reason for this is straight 
+forward:
 Assume we have $n$ minibatches of data for model training. When the model is trained using single thread, it gets updated $n$
 times. When data is distributed to $m$ machines, then each model gets updated $n/m$ times. Since the effect of model averaging 
 is mostly aggregating knowledge learnt from different data partition, the absolute change of model shall be compensated by 
@@ -308,6 +325,7 @@ and is shown to be superior to performance scheduling and power scheduling. In t
 rate as the first method (Newbob), and decrease to the final learning rate (which is set to be 0.01 * initial learning rate). The
 number of epochs is set to $15$ in this task, which is set to be the same as Newbob scheduling.
 
+As is shown in Table~\ref{tab:lr}, exponential learning rate gives slight better decoding results than Newbob.
 \begin{table}
   \centering
   \begin{tabular}{c|c|c|c|c}
@@ -322,10 +340,11 @@ number of epochs is set to $15$ in this task, which is set to be the same as New
     \hline
   \end{tabular}
   \caption{Comparing learning rate schedule}
-  \label{tab:init}
+  \label{tab:lr}
 \end{table}
 
 \subsection{Online NG-SGD Matters}
+Table~\ref{tab:ngsgd} compares plain SGD with NG-SGD in model averaging mode, and it shows NG-SGD with 
 \begin{table}
   \centering
   \begin{tabular}{c|c|c|c|c}
@@ -344,12 +363,15 @@ number of epochs is set to $15$ in this task, which is set to be the same as New
 \end{table}
 
 \section{Conclusion and Future Work}
-Neural network training can be efficiently speed up by using model averaging techniques and NG-SGD. 
-Butterfly-mixing and ring reduction can reduce communication time a lot, but the models may not converge as well as 
-Allreduce when the number of jobs goes up to 16.
+In this paper, we show that neural network training can be efficiently speeded up using model averaging. 
+on a 300h Switchboard dataset, a 9.3x / 17x speedup could be achieved using 16 / 32 GPUs respectively, 
+with limited decoding accuracy loss. We also show that model averaging benefits a lot from NG-SGD and RBM based pretraining.
+Preliminary experiments on minibatch size, averaging frequency and learning rate schedules are also presented.
 
-Further improvement might be achieved if parallel training runs on top of serial training initialization.
-CUDA aware MPI, learning rate schedule. Averaging frequency. Theory on convergence.
+Further accuracy improvement might be achieved if parallel training runs on top of serial training initialization.
+It would be interesting to see if sequence-discriminative training combines well with model averaging.
+Speedup factor could be further improved if CUDA aware MPI is used. Theory on convergence using model averaging is 
+to be explored, which might be useful for guiding future development.
 
 \section{Acknowledgements}
 We would like to thank Karel Vesely and Daniel Povey who wrote the original "nnet1" neural network training code
@@ -362,6 +384,7 @@ HPC resources that have contributed to the research results reported within this
 % References should be produced using the bibtex program from suitable
 % BiBTeX files (here: strings, refs, manuals). The IEEEbib.bst bibliography
 % style file from IEEE produces unsorted bibliography list.
+
 % -------------------------------------------------------------------------
 \bibliographystyle{IEEEbib}
 \bibliography{paper}
