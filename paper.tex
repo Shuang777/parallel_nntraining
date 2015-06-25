@@ -211,26 +211,17 @@ scaling factor
   \label{fig:scaling}
 \end{figure}
 
-percentage of time spent on communication
-\begin{figure}[htb]
-  \centering
-  \includegraphics[width=0.5\textwidth]{percent.png}
-  \caption{Percentage of time on MPI communication v.s. number of gpus}
-  \label{fig:percent}
-\end{figure}
-
 \begin{table}
   \centering
   \begin{tabular}{c|c|c|c|c|c|c}
     \hline
-     Nodes  & 1    & 2    & 4    & 8    & 16 & 32\\
+     Nodes  & 1    & 2    & 4   & 8      & 16     & 32\\
     \hline
-Allreduce &    14.7 & -- & -- & 15.1 & 15.1   & 15.2\\
-    \hline
-Butterfly &    14.7 & -- & -- & --   & 15.6   & 16.0\\
+    SWB     & 14.7 & --   & --  & 15.1   & 15.1   & 15.2\\
+    CallHM  & 26.8 & --   & --  & 27.4   & 27.0   & 27.1 \\
     \hline
   \end{tabular}
-  \caption{Comparison of WERs using different number of GPUs }
+  \caption{Comparison of WERs using different number of GPUs}
   \label{tab:wer}
 \end{table}
 
@@ -290,7 +281,7 @@ better training accuracy is within expectation in that frequent model averaging 
     \hline
     nodes       &  1    &   16    &    1       &   16   &    \\
     \hline
-    256         &  --      & 15.1  & 27.0     &   & \\
+    256         &  --      &   &  --     &   & \\
     \hline
     1024        & 9.32     & 15.1  & 27.0     &   & \\
     \hline
