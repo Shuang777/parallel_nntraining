@@ -15,6 +15,6 @@ set y2label "Speedup factor"
 set y2r [0:25]
 
 plot "scaling.dat" using 1:($2*100) title 'All-reduce scaling factor' with linespoints axes x1y1, \
-     "scaling.dat" using 1:($3*100) title 'Butterfly scaling factor' with linespoints axes x1y1, \
+#     "scaling.dat" using 1:($3*100) title 'Butterfly scaling factor' with linespoints axes x1y1, \
      "scaling.dat" using 1:4 title 'All-reduce speedup factor' with linespoints axes x1y2, \
-     "scaling.dat" using 1:5 title 'Butterfly speedup factor' with linespoints axes x1y2
+#     "scaling.dat" using 1:5 title 'Butterfly speedup factor' with linespoints axes x1y2
