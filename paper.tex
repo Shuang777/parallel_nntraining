@@ -4,6 +4,7 @@
 % --------------------------------------------------------------------------
 \documentclass{article}
 \usepackage{spconf,amsmath,graphicx}
+\usepackage{slashbox,pict2e}
 
 % Example definitions.
 % --------------------
@@ -13,7 +14,7 @@
 
 % Title.
 % ------
-\title{Investigation on Parallel Training of Deep Neural Network using Model Averaging}
+\title{Experiments on Parallel Training of Deep Neural Network using Model Averaging}
 %
 % Single address.
 % ---------------
@@ -55,21 +56,25 @@ local model updates, and model averaging across nodes is done every few minibatc
 
 We use multiple GPUs for data parallelization, and Message Passing Interface (MPI) for communication between nodes,
 which allows us to perform model averaging frequently without losing much time on communication.
-We investigate the effectiveness of Natrual Gradient for Stochasitc Gradient Descent (NG-SGD) in the model averaging
-framework, and compare two learning rate schedule strategies for model update. It is shown that NG-SGD leads to better
-convergence in model averaging framework. On the 300h Swithboard dataset, a 9.3 times speedup is achieved using 16 GPUs
-and 17 times speedup using 32 GPUs with limited decoding accuracy loss. 
+We investigate the effectiveness of Natrual Gradient Stochasitc Gradient Descent (NG-SGD) and Restricted Boltzmann 
+Machine (RBM) pretraining for parallel training in model-averaging framework, and explore the best setups in 
+term of different learning rate schedules, averaging frequencies and minibatch sizes. It is shown that NG-SGD 
+and RBM pretraining benefits parameter-averaging based model training. On the 300h Swithboard dataset, a 9.3 times 
+speedup is achieved using 16 GPUs and 17 times speedup using 32 GPUs with limited decoding accuracy loss. 
+\footnote{This work is not submitted to 
+peer-review conferences because the authors think it needs more investigation. The authors are in lack of 
+resources to perform further exploration. However, we welcome any comments and suggestions.}
 \end{abstract}
 %
 \begin{keywords}
-Parallel training, model averaging, deep neural network
+Parallel training, model averaging, deep neural network, natural gradient
 \end{keywords}
 %
 \section{Introduction}
 \label{sec:intro}
 Deep Neural Networks (DNN) has shown its effeciveness in several machine learning tasks, espencially in speech
 recognition. The large model size and massive training examples make DNN a powerful model for classification. However,
-these two factors also slow down the training procedure of DNNs.
+these two factors also slow down the training procedure.
 
 Parallelization of DNN training has been a popular topic since the revival of neural networks. Several different strategies
 have been proposed to tackle this problem. Multiple thread CPU parallelization and single GPU implementation are compared
@@ -78,7 +83,7 @@ by a factor of 2.
 
 Optimality for parallelization of DNN training was analyzed in \cite{seide2014parallelizability}, and based on the analysis, 
 a gradient quantization approach (1-bit SGD) was proposed to minimize communication cost \cite{seide20141}. It shows that 1 bit
-can effectively reduce the amount of data exchanged in an MPI framework, and a 10 times speed-up using 40 GPUs.
+quantization can effectively reduce data exchange in an MPI framework, and a 10 times speed-up is achieved using 40 GPUs.
 
 DistBelief proposed in \cite{dean2012large} reports that 8 CPU machines train 2.2 times faster than a single GPU machine on a
 moderately sized speech model. Asynchronous SGD using multiple GPUs achieved a 3.2x speed-up on 4 GPUs \cite{zhang2013asynchronous}.
@@ -228,12 +233,16 @@ Table~\ref{tab:wer} shows the main decoding results for DNNs trained using diffe
 results of DNNs trained model averaging degrades 0.3\~0.4 WER, depending on the number of GPUs used.
 \begin{table}
   \centering
-  \begin{tabular}{c|c|c|c|c|c|c}
+  \begin{tabular}{|c|c|c|c|c|c|c|}
     \hline
-     Nodes  & 1    & 2    & 4   & 8      & 16     & 32\\
+    \backslashbox{Data}{Nodes}  & 1    & 2    & 4   & 8      & 16     & 32\\
     \hline
-    SWB     & 14.7 & 14.9 & --  & 15.1   & 15.1   & 15.2\\
-    CallHM  & 26.8 & 26.8 & --  & 27.4   & 27.0   & 27.1 \\
+    SWB     & 14.7 & -- & --  & 15.1   & 15.1   & 15.2\\
+    CallHM  & 26.8 & -- & --  & 27.4   & 27.0   & 27.1 \\
+    \hline
+    SWB     & 16.1  & -- & -- & 16.4  & 16.2  & 16.4 \\
+    SWB2P3  & 21.0  & -- & -- & 21.8  & 21.7  & 21.7 \\
+    SWB-Cell & 27.4 & -- & -- & 27.3  & 27.4  & 27.8 \\
     \hline
   \end{tabular}
   \caption{Comparison of WERs using different number of GPUs}
@@ -252,7 +261,7 @@ Table~\ref{tab:init} compares random initialization with Restricted Boltzmann Ma
     \hline
     Nodes          &  1     & 32     &   1    & 32\\
     \hline
-    random init     & --    & 16.4   &  --    & 28.8 \\
+    random init     & 15.6  & 16.4   & 27.4   & 28.8 \\
     \hline
     RBM pretraining & 14.7  & 15.2   & 26.8   & 27.1 \\
     \hline
@@ -260,8 +269,8 @@ Table~\ref{tab:init} compares random initialization with Restricted Boltzmann Ma
   \caption{Comparing RBM pretraining with random initialization}
   \label{tab:init}
 \end{table}
-As we can see in the table, random initialization is worse than RBM pretraining based DNN by xx in single GPU case.
-In model averaging setup, random initialization becomes even worse -- a xx point more degradation on WER.
+As we can see in the table, random initialization is worse than DNN with RBM pretraining by 0.9/0.6 in single GPU case.
+While in model averaging setup, random initialization becomes even worse -- 0.3/0.9 point more degradation on WER.
 
 \subsection{Averaging frequency}
 Averaging frequency here is defined as the number of minibatch-SGD performed per model averaging.
@@ -289,7 +298,7 @@ steady gradient estimation.
 \end{table}
 
 \subsection{Minibatch Size}
-Table~\ref{tab:mbsize} compares two different minibatch size in model averaging setup. It is shown that.
+Table~\ref{tab:mbsize} compares two different minibatch size in model averaging setup.
 \begin{table}
   \centering
   \begin{tabular}{c|c|c|c|c|c}
@@ -298,9 +307,9 @@ Table~\ref{tab:mbsize} compares two different minibatch size in model averaging 
     \hline
     nodes       &  1    &   16    &    1     &   16   &    \\
     \hline
-    256         &  --      &      &  --      &        & \\
+    256         & 15.3     & 15.6 & 26.8     &  27.3   & -- \\
     \hline
-    1024        & 9.32     & 15.1 & 27.0     &        & \\
+    1024        & 14.7     & 15.1 & 26.8     &  27.0   & 9.32\\
     \hline
   \end{tabular}
   \caption{Comparing different minibatch size}
@@ -325,7 +334,9 @@ and is shown to be superior to performance scheduling and power scheduling. In t
 rate as the first method (Newbob), and decrease to the final learning rate (which is set to be 0.01 * initial learning rate). The
 number of epochs is set to $15$ in this task, which is set to be the same as Newbob scheduling.
 
-As is shown in Table~\ref{tab:lr}, exponential learning rate gives slight better decoding results than Newbob.
+As is shown in Table~\ref{tab:lr}, these two learning rate scheduling methods give similar decoding results. However, 
+exponential learning rate might need more tuning since it requires a initial learning rate, a final learning rate and
+predefined number of epochs to train.
 \begin{table}
   \centering
   \begin{tabular}{c|c|c|c|c}
@@ -344,7 +355,8 @@ As is shown in Table~\ref{tab:lr}, exponential learning rate gives slight better
 \end{table}
 
 \subsection{Online NG-SGD Matters}
-Table~\ref{tab:ngsgd} compares plain SGD with NG-SGD in model averaging mode, and it shows NG-SGD with 
+Table~\ref{tab:ngsgd} compares plain SGD with NG-SGD in model averaging mode, and it shows NG-SGD is crucial to 
+model training with parameter-averaging.
 \begin{table}
   \centering
   \begin{tabular}{c|c|c|c|c}
@@ -363,7 +375,7 @@ Table~\ref{tab:ngsgd} compares plain SGD with NG-SGD in model averaging mode, an
 \end{table}
 
 \section{Conclusion and Future Work}
-In this paper, we show that neural network training can be efficiently speeded up using model averaging. 
+In this work, we show that neural network training can be efficiently speeded up using model averaging. 
 on a 300h Switchboard dataset, a 9.3x / 17x speedup could be achieved using 16 / 32 GPUs respectively, 
 with limited decoding accuracy loss. We also show that model averaging benefits a lot from NG-SGD and RBM based pretraining.
 Preliminary experiments on minibatch size, averaging frequency and learning rate schedules are also presented.
