@@ -182,7 +182,7 @@ the scalar with a symmetric positive definite matrix $E_t$, which is the inverse
 Suppose $x$ is the variable we are modeling, and $f(x;\theta)$ is the probability or likelihood of $x$ given parameters $\theta$, then the
 Fisher information matrix $I(\theta)$ is defined as
 \begin{equation}
-\frac{\partial}{\partial\theta}\log f(x;\theta)
+  E\bigg[\bigg(\frac{\partial}{\partial\theta}\log f(x;\theta)\bigg) \bigg(\frac{\partial}{\partial\theta}\log f(x;\theta)\bigg)^\top\bigg]
 \end{equation}
 
 For large scale speech recognition, it is impossible to estimate Fisher information matrix and perform inversion, 
